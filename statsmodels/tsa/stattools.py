@@ -357,6 +357,65 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
            and amplitude modulation. Sankhya: The Indian Journal of
            Statistics, Series A, pp.383-392.
     """
+    def handle_missing(x, missing):
+        missing = missing.lower()
+        if missing not in ['none', 'raise', 'conservative', 'drop']:
+            raise ValueError("missing option %s not understood" % missing)
+        if missing == 'none':
+            deal_with_masked = False
+        else:
+            deal_with_masked = has_missing(x)
+        if deal_with_masked:
+            if missing == 'raise':
+                raise MissingDataError("NaNs were encountered in the data")
+            notmask_bool = ~np.isnan(x)  # bool
+            if missing == 'conservative':
+                # Must copy for thread safety
+                x = x.copy()
+                x[~notmask_bool] = 0
+            else:  # 'drop'
+                x = x[notmask_bool]  # copies non-missing
+            notmask_int = notmask_bool.astype(int)  # int
+        return notmask_bool, notmask_int, deal_with_masked
+
+    def set_num_acov(x, nlag, len_data):
+        lag_len = nlag
+        if nlag is None:
+            lag_len = len_data - 1
+        elif nlag > len_data - 1:
+            raise ValueError('nlag must be smaller than nobs - 1')
+        return lag_len
+
+    def time_domain_acov(x, len_data, lag_len, deal_with_masked, missing, unbiased, notmask_int):
+        acov = np.empty(lag_len + 1)
+        acov[0] = x.dot(x)
+        for i in range(lag_len):
+            acov[i + 1] = x[i + 1:].dot(x[:-(i + 1)])
+        if not deal_with_masked or missing == 'drop':
+            if unbiased:
+                acov /= (len_data - np.arange(lag_len + 1))
+            else:
+                acov /= len_data
+        else:
+            if unbiased:
+                divisor = np.empty(lag_len + 1, dtype=np.int64)
+                divisor[0] = notmask_int.sum()
+                for i in range(lag_len):
+                    divisor[i + 1] = notmask_int[i + 1:].dot(notmask_int[:-(i + 1)])
+                divisor[divisor == 0] = 1
+                acov /= divisor
+            else:  # biased, missing data but npt 'drop'
+                acov /= notmask_int.sum()
+        return acov
+
+    def freq_domain_acov(x, ifft_devisor):
+        nobs = len(x)
+        n = _next_regular(2 * nobs + 1)
+        Frf = np.fft.fft(x, n=n)
+        acov = np.fft.ifft(Frf * np.conjugate(Frf))[:nobs] / ifft_devisor[nobs - 1:]
+        acov = acov.real
+        return acov
+
     unbiased = bool_like(unbiased, 'unbiased')
     demean = bool_like(demean, 'demean')
     fft = bool_like(fft, 'fft', optional=True)
@@ -373,84 +432,46 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
         fft = False
 
     x = array_like(x, 'x', ndim=1)
+    len_data = len(x)
 
-    missing = missing.lower()
-    if missing not in ['none', 'raise', 'conservative', 'drop']:
-        raise ValueError("missing option %s not understood" % missing)
-    if missing == 'none':
-        deal_with_masked = False
-    else:
-        deal_with_masked = has_missing(x)
-    if deal_with_masked:
-        if missing == 'raise':
-            raise MissingDataError("NaNs were encountered in the data")
-        notmask_bool = ~np.isnan(x)  # bool
-        if missing == 'conservative':
-            # Must copy for thread safety
-            x = x.copy()
-            x[~notmask_bool] = 0
-        else:  # 'drop'
-            x = x[notmask_bool]  # copies non-missing
-        notmask_int = notmask_bool.astype(int)  # int
+    notmask_bool, notmask_int, deal_with_masked = handle_missing(x=x, missing=missing)
 
     if demean and deal_with_masked:
         # whether 'drop' or 'conservative':
-        xo = x - x.sum() / notmask_int.sum()
+        x = x - x.sum() / notmask_int.sum()
         if missing == 'conservative':
-            xo[~notmask_bool] = 0
+            x[~notmask_bool] = 0
     elif demean:
-        xo = x - x.mean()
-    else:
-        xo = x
+        x = x - x.mean()
 
-    n = len(x)
-    lag_len = nlag
-    if nlag is None:
-        lag_len = n - 1
-    elif nlag > n - 1:
-        raise ValueError('nlag must be smaller than nobs - 1')
+    lag_len = set_num_acov(x=x, nlag=nlag)
 
     if not fft and nlag is not None:
-        acov = np.empty(lag_len + 1)
-        acov[0] = xo.dot(xo)
-        for i in range(lag_len):
-            acov[i + 1] = xo[i + 1:].dot(xo[:-(i + 1)])
-        if not deal_with_masked or missing == 'drop':
-            if unbiased:
-                acov /= (n - np.arange(lag_len + 1))
-            else:
-                acov /= n
-        else:
-            if unbiased:
-                divisor = np.empty(lag_len + 1, dtype=np.int64)
-                divisor[0] = notmask_int.sum()
-                for i in range(lag_len):
-                    divisor[i + 1] = notmask_int[i + 1:].dot(notmask_int[:-(i + 1)])
-                divisor[divisor == 0] = 1
-                acov /= divisor
-            else:  # biased, missing data but npt 'drop'
-                acov /= notmask_int.sum()
-        return acov
+        acov = time_domain_acov(
+            x=x,
+            len_data=len_data,
+            lag_len=lag_len
+        )
 
     if unbiased and deal_with_masked and missing == 'conservative':
-        d = np.correlate(notmask_int, notmask_int, 'full')
-        d[d == 0] = 1
+        ifft_devisor = np.correlate(notmask_int, notmask_int, 'full')
+        ifft_devisor[ifft_devisor == 0] = 1
     elif unbiased:
-        xi = np.arange(1, n + 1)
-        d = np.hstack((xi, xi[:-1][::-1]))
+        range_array = np.arange(1, len_data + 1)
+        ifft_devisor = np.hstack((range_array, range_array[:-1][::-1]))
     elif deal_with_masked:  # biased and NaNs given and ('drop' or 'conservative')
-        d = notmask_int.sum() * np.ones(2 * n - 1)
+        ifft_devisor = notmask_int.sum() * np.ones(2*len_data - 1)
     else:  # biased and no NaNs or missing=='none'
-        d = n * np.ones(2 * n - 1)
+        ifft_devisor = len_data * np.ones(2*len_data - 1)
 
     if fft:
-        nobs = len(xo)
-        n = _next_regular(2 * nobs + 1)
-        Frf = np.fft.fft(xo, n=n)
-        acov = np.fft.ifft(Frf * np.conjugate(Frf))[:nobs] / d[nobs - 1:]
-        acov = acov.real
+        acov = freq_domain_acov(
+            x=x,
+            len_data=len_data,
+            ifft_devisor=ifft_devisor
+        )
     else:
-        acov = np.correlate(xo, xo, 'full')[n - 1:] / d[n - 1:]
+        acov = np.correlate(x, x, 'full')[len_data - 1:] / ifft_devisor[len_data - 1:]
 
     if nlag is not None:
         # Copy to allow gc of full array rather than view
