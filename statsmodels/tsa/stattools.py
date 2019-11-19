@@ -481,13 +481,12 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
             len_data=len_data,
             ifft_devisor=ifft_devisor
         )
-    else:
+    elif not fft and nlag is None:
         acov = np.correlate(
             x,
             x,
             'full')[len_data - 1:] / ifft_devisor[len_data - 1:]
-
-    if nlag is not None:
+    elif nlag is not None:
         # Copy to allow gc of full array rather than view
         return acov[:lag_len + 1].copy()
     return acov
