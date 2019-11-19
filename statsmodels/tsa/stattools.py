@@ -337,14 +337,15 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
         If True, use FFT convolution.  This method should be preferred
         for long time series.
     missing : str
-        A string in ['none', 'raise', 'conservative', 'drop'] specifying how
-        the NaNs are to be treated.
+        A string in ['none', 'raise', 'conservative', 'drop'] specifying
+        how the NaNs are to be treated.
     nlag : {int, None}
         Limit the number of autocovariances returned.  Size of returned
-        array is nlag + 1.  Setting nlag when fft is False uses a simple,
-        direct estimator of the autocovariances that only computes the first
-        nlag + 1 values. This can be much faster when the time series is long
-        and only a small number of autocovariances are needed.
+        array is nlag + 1.  Setting nlag when fft is False uses a
+        simple, direct estimator of the autocovariances that only
+        computes the first nlag + 1 values. This can be much faster
+        when the time series is long and only a small number of
+        autocovariances are needed.
 
     Returns
     -------
@@ -353,9 +354,9 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
 
     References
     -----------
-    .. [1] Parzen, E., 1963. On spectral analysis with missing observations
-           and amplitude modulation. Sankhya: The Indian Journal of
-           Statistics, Series A, pp.383-392.
+    .. [1] Parzen, E., 1963. On spectral analysis with missing
+           observations and amplitude modulation. Sankhya: The Indian
+           Journal of Statistics, Series A, pp.383-392.
     """
     def handle_missing(x, missing):
         missing = missing.lower()
@@ -379,6 +380,7 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
         return notmask_bool, notmask_int, deal_with_masked
 
     def set_num_acov(x, nlag, len_data):
+        """Set the number of autocovariences that is returned."""
         lag_len = nlag
         if nlag is None:
             lag_len = len_data - 1
@@ -386,7 +388,9 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
             raise ValueError('nlag must be smaller than nobs - 1')
         return lag_len
 
-    def time_domain_acov(x, len_data, lag_len, deal_with_masked, missing, unbiased, notmask_int):
+    def time_domain_acov(x, len_data, lag_len, deal_with_masked, missing,
+                         unbiased, notmask_int):
+        """Calculate the autocovarience using the time domain."""
         acov = np.empty(lag_len + 1)
         acov[0] = x.dot(x)
         for i in range(lag_len):
@@ -401,7 +405,8 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
                 divisor = np.empty(lag_len + 1, dtype=np.int64)
                 divisor[0] = notmask_int.sum()
                 for i in range(lag_len):
-                    divisor[i + 1] = notmask_int[i + 1:].dot(notmask_int[:-(i + 1)])
+                    divisor[i + 1] = notmask_int[i + 1:].\
+                        dot(notmask_int[:-(i + 1)])
                 divisor[divisor == 0] = 1
                 acov /= divisor
             else:  # biased, missing data but npt 'drop'
@@ -409,10 +414,13 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
         return acov
 
     def freq_domain_acov(x, ifft_devisor):
+        """Calculate the autocovarience using the frequency domain."""
         nobs = len(x)
         n = _next_regular(2 * nobs + 1)
         Frf = np.fft.fft(x, n=n)
-        acov = np.fft.ifft(Frf * np.conjugate(Frf))[:nobs] / ifft_devisor[nobs - 1:]
+        acov = np.fft.ifft(
+            Frf * np.conjugate(Frf)
+            )[:nobs] / ifft_devisor[nobs - 1:]
         acov = acov.real
         return acov
 
@@ -434,7 +442,9 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
     x = array_like(x, 'x', ndim=1)
     len_data = len(x)
 
-    notmask_bool, notmask_int, deal_with_masked = handle_missing(x=x, missing=missing)
+    notmask_bool, notmask_int, deal_with_masked = handle_missing(
+        x=x,
+        missing=missing)
 
     if demean and deal_with_masked:
         # whether 'drop' or 'conservative':
@@ -459,7 +469,8 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
     elif unbiased:
         range_array = np.arange(1, len_data + 1)
         ifft_devisor = np.hstack((range_array, range_array[:-1][::-1]))
-    elif deal_with_masked:  # biased and NaNs given and ('drop' or 'conservative')
+    # biased and NaNs given and ('drop' or 'conservative')
+    elif deal_with_masked:
         ifft_devisor = notmask_int.sum() * np.ones(2*len_data - 1)
     else:  # biased and no NaNs or missing=='none'
         ifft_devisor = len_data * np.ones(2*len_data - 1)
@@ -471,7 +482,10 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
             ifft_devisor=ifft_devisor
         )
     else:
-        acov = np.correlate(x, x, 'full')[len_data - 1:] / ifft_devisor[len_data - 1:]
+        acov = np.correlate(
+            x,
+            x,
+            'full')[len_data - 1:] / ifft_devisor[len_data - 1:]
 
     if nlag is not None:
         # Copy to allow gc of full array rather than view
