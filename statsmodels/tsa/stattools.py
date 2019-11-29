@@ -462,7 +462,7 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
         acov = time_domain_acov(
             x=x,
             len_data=len_data,
-            lag_len=lag_len
+            lag_len=lag_len,
         )
 
     if unbiased and deal_with_masked and missing == 'conservative':
@@ -480,8 +480,7 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
     if fft:
         acov = freq_domain_acov(
             x=x,
-            len_data=len_data,
-            ifft_devisor=ifft_devisor
+            len_data=len_data,            ifft_devisor=ifft_devisor
         )
     elif not fft and nlag is None:
         acov = np.correlate(
