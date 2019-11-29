@@ -367,6 +367,7 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
         else:
             deal_with_masked = has_missing(x)
         notmask_bool = None
+        notmask_int = None
         if deal_with_masked:
             if missing == 'raise':
                 raise MissingDataError("NaNs were encountered in the data")
