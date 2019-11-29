@@ -456,7 +456,7 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
     elif demean:
         x = x - x.mean()
 
-    lag_len = set_num_acov(x=x, nlag=nlag)
+    lag_len = set_num_acov(x=x, nlag=nlag, len_data=len_data)
 
     if not fft and nlag is not None:
         acov = time_domain_acov(
