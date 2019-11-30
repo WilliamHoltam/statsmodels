@@ -415,9 +415,8 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
                 acov /= notmask_int.sum()
         return acov
 
-    def freq_domain_acov(x, ifft_devisor):
+    def freq_domain_acov(x, nobs, ifft_devisor):
         """Calculate the autocovarience using the frequency domain."""
-        nobs = len(x)
         n = _next_regular(2 * nobs + 1)
         Frf = np.fft.fft(x, n=n)
         acov = np.fft.ifft(
@@ -480,7 +479,8 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
     if fft:
         acov = freq_domain_acov(
             x=x,
-            len_data=len_data,            ifft_devisor=ifft_devisor
+            nobs=len_data,
+            ifft_devisor=ifft_devisor,
         )
     elif not fft and nlag is None:
         acov = np.correlate(
