@@ -462,6 +462,10 @@ def acovf(x, unbiased=False, demean=True, fft=None, missing='none', nlag=None):
             x=x,
             len_data=len_data,
             lag_len=lag_len,
+            deal_with_masked=deal_with_masked,
+            missing=missing,
+            unbiased=unbiased,
+            notmask_int=notmask_int,
         )
 
     if unbiased and deal_with_masked and missing == 'conservative':
