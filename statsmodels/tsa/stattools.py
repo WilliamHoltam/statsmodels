@@ -2036,3 +2036,4 @@ class ZivotAndrewsUnitRoot(object):
 
 zivot_andrews = ZivotAndrewsUnitRoot()
 zivot_andrews.__doc__ = zivot_andrews.run.__doc__
+
